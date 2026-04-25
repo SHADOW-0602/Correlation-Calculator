@@ -66,6 +66,24 @@ streamlit run app.py
 
 Navigate to `http://localhost:8501` in your browser to start using the tool.
 
+## 🚀 Deployment (Streamlit Community Cloud)
+
+1. **Push to GitHub**: Ensure your code (including `requirements.txt` and `.gitignore`) is pushed to a public or private GitHub repository.
+2. **Sign in to Streamlit**: Go to [share.streamlit.io](https://share.streamlit.io/) and connect your GitHub account.
+3. **Deploy App**:
+   - Click **"New app"**.
+   - Select your repository, branch, and main file path (`app.py`).
+4. **Configure Secrets**:
+   Since `.env` is ignored by Git, you must add your API keys manually:
+   - In the Streamlit Cloud dashboard, go to your app settings.
+   - Select **"Secrets"**.
+   - Add your keys in TOML format:
+     ```toml
+     POLYGON_API_KEY = "your_key_here"
+     ALPHAVANTAGE_API_KEY = "your_key_here"
+     ```
+5. **Launch**: Click **"Deploy!"**. Streamlit will install dependencies from `requirements.txt` and launch your app.
+
 ## 📂 Project Structure
 
 - `app.py`: Main Streamlit application and UI logic.
