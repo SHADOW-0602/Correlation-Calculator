@@ -203,6 +203,8 @@ def fetch_price_panel(
     polygon_api_key: Optional[str] = None,
     alphavantage_api_key: Optional[str] = None,
     prefer_provider: Optional[str] = None,
+    timespan: str = "day",
+    multiplier: int = 1,
 ) -> Dict[str, Any]:
     tickers = parse_symbols(",".join(symbols) if not isinstance(symbols, str) else symbols)
     benchmark = benchmark_symbol.strip().upper()
@@ -213,6 +215,8 @@ def fetch_price_panel(
         from_date=from_date,
         to_date=to_date,
         adjusted=adjusted,
+        timespan=timespan,
+        multiplier=multiplier,
         polygon_api_key=polygon_api_key,
         alphavantage_api_key=alphavantage_api_key,
         prefer_provider=prefer_provider,
@@ -302,14 +306,14 @@ def summarize_drawdown(prices: pd.Series) -> Dict[str, Any]:
     }
 
 
-def compute_annualized_volatility(returns: pd.Series, *, trading_days: int = TRADING_DAYS_PER_YEAR) -> float:
+def compute_annualized_volatility(returns: pd.Series, *, periods_per_year: int = TRADING_DAYS_PER_YEAR) -> float:
     clean = pd.to_numeric(returns, errors="coerce").dropna()
     if clean.empty:
         return float("nan")
-    return float(clean.std(ddof=1) * np.sqrt(trading_days))
+    return float(clean.std(ddof=1) * np.sqrt(periods_per_year))
 
 
-def compute_annualized_return(returns: pd.Series, *, trading_days: int = TRADING_DAYS_PER_YEAR) -> float:
+def compute_annualized_return(returns: pd.Series, *, periods_per_year: int = TRADING_DAYS_PER_YEAR) -> float:
     clean = pd.to_numeric(returns, errors="coerce").dropna()
     if clean.empty:
         return float("nan")
@@ -317,30 +321,30 @@ def compute_annualized_return(returns: pd.Series, *, trading_days: int = TRADING
     n = len(clean)
     if n == 0 or compounded <= 0:
         return float("nan")
-    return float(compounded ** (trading_days / n) - 1.0)
+    return float(compounded ** (periods_per_year / n) - 1.0)
 
 
 def compute_sharpe_ratio(
     returns: pd.Series,
     *,
     risk_free_rate: float = 0.0,
-    trading_days: int = TRADING_DAYS_PER_YEAR,
+    periods_per_year: int = TRADING_DAYS_PER_YEAR,
 ) -> float:
     clean = pd.to_numeric(returns, errors="coerce").dropna()
     if clean.empty:
         return float("nan")
-    daily_rf = risk_free_rate / trading_days
+    daily_rf = risk_free_rate / periods_per_year
     excess = clean - daily_rf
     denom = excess.std(ddof=1)
     if denom == 0 or pd.isna(denom):
         return float("nan")
-    return float(np.sqrt(trading_days) * excess.mean() / denom)
+    return float(np.sqrt(periods_per_year) * excess.mean() / denom)
 
 
 def compute_information_ratio(
     active_returns: pd.Series,
     *,
-    trading_days: int = TRADING_DAYS_PER_YEAR,
+    periods_per_year: int = TRADING_DAYS_PER_YEAR,
 ) -> float:
     clean = pd.to_numeric(active_returns, errors="coerce").dropna()
     if clean.empty:
@@ -348,7 +352,7 @@ def compute_information_ratio(
     denom = clean.std(ddof=1)
     if denom == 0 or pd.isna(denom):
         return float("nan")
-    return float(np.sqrt(trading_days) * clean.mean() / denom)
+    return float(np.sqrt(periods_per_year) * clean.mean() / denom)
 
 
 def run_simple_regression(y: pd.Series, x: pd.Series) -> Dict[str, float]:
@@ -637,13 +641,12 @@ def _earnings_removed_dates(
     pre_days, post_days = removal_window
     for impact in impacts:
         impact_ts = pd.Timestamp(impact.impact_date)
-        if impact_ts not in close_matrix.index:
-            continue
-        center = close_matrix.index.get_loc(impact_ts)
-        start_idx = max(0, int(center) - int(pre_days))
-        end_idx = min(len(close_matrix.index) - 1, int(center) + int(post_days))
-        for idx in range(start_idx, end_idx + 1):
-            removed.add(close_matrix.index[idx])
+        # Remove a window of calendar days around the impact
+        start_ts = impact_ts - pd.Timedelta(days=int(pre_days))
+        end_ts = impact_ts + pd.Timedelta(days=int(post_days))
+        
+        mask = (close_matrix.index >= start_ts) & (close_matrix.index <= end_ts)
+        removed.update(close_matrix.index[mask])
 
     return sorted(removed), impacts_to_frame(impacts)
 
@@ -659,6 +662,7 @@ def analyze_symbol_vs_benchmark(
     pre_window_buffer_days: int = 7,
     risk_free_rate: float = 0.0,
     sector_etf: Optional[str] = None,
+    periods_per_year: int = TRADING_DAYS_PER_YEAR,
 ) -> Dict[str, Any]:
     asset = symbol.strip().upper()
     benchmark = config.benchmark_symbol.strip().upper()
@@ -782,11 +786,11 @@ def analyze_symbol_vs_benchmark(
         "alpha": float(regression["alpha"]),
         "beta": float(regression["beta"]),
         "r_squared": float(regression["r_squared"]),
-        "asset_annual_return": compute_annualized_return(reg_df["asset_simple"]),
-        "benchmark_annual_return": compute_annualized_return(reg_df["benchmark_simple"]),
-        "asset_sharpe": compute_sharpe_ratio(reg_df["asset_simple"], risk_free_rate=risk_free_rate),
-        "tracking_error": compute_annualized_volatility(active_simple),
-        "information_ratio": compute_information_ratio(active_simple),
+        "asset_annual_return": compute_annualized_return(reg_df["asset_simple"], periods_per_year=periods_per_year),
+        "benchmark_annual_return": compute_annualized_return(reg_df["benchmark_simple"], periods_per_year=periods_per_year),
+        "asset_sharpe": compute_sharpe_ratio(reg_df["asset_simple"], risk_free_rate=risk_free_rate, periods_per_year=periods_per_year),
+        "tracking_error": compute_annualized_volatility(active_simple, periods_per_year=periods_per_year),
+        "information_ratio": compute_information_ratio(active_simple, periods_per_year=periods_per_year),
         "asset_max_drawdown": asset_dd["max_drawdown"],
         "outlier_count": int(outlier_mask.fillna(False).sum()),
         "rolling_correlation_latest": rolling_corr.iloc[-1] if not rolling_corr.dropna().empty else None,
@@ -831,6 +835,8 @@ def analyze_symbols_vs_benchmark(
     max_missing_vs_benchmark: float = 0.05,
     risk_free_rate: float = 0.0,
     manual_sector_etf: Optional[str] = None,
+    timespan: str = "day",
+    multiplier: int = 1,
 ) -> Dict[str, Any]:
     tickers = parse_symbols(",".join(symbols) if not isinstance(symbols, str) else symbols)
     benchmark = config.benchmark_symbol.strip().upper()
@@ -861,10 +867,22 @@ def analyze_symbols_vs_benchmark(
         from_date=from_date,
         to_date=to_date,
         adjusted=adjusted,
+        timespan=timespan,
+        multiplier=multiplier,
         polygon_api_key=polygon_api_key,
         alphavantage_api_key=alphavantage_api_key,
         prefer_provider=prefer_provider,
     )
+
+    # Determine periods per year for annualization
+    periods_per_year = TRADING_DAYS_PER_YEAR
+    if timespan == "hour":
+        periods_per_year = TRADING_DAYS_PER_YEAR * 7 # Assumption: 7 hour trading day
+    elif timespan == "minute":
+        periods_per_year = TRADING_DAYS_PER_YEAR * 7 * 60
+    
+    if multiplier > 1:
+        periods_per_year = max(1, periods_per_year // multiplier)
 
     close_matrix = panel["close_matrix"]
     open_matrix = panel["open_matrix"]
@@ -888,6 +906,7 @@ def analyze_symbols_vs_benchmark(
                 max_missing_vs_benchmark=max_missing_vs_benchmark,
                 risk_free_rate=risk_free_rate,
                 sector_etf=ticker_sectors.get(ticker),
+                periods_per_year=periods_per_year,
             )
             analyses[ticker] = analysis
             summary_rows.append(analysis["summary"])
@@ -906,6 +925,7 @@ def analyze_symbols_vs_benchmark(
                         max_missing_vs_benchmark=max_missing_vs_benchmark,
                         risk_free_rate=risk_free_rate,
                         sector_etf=ticker_sectors.get(ticker),
+                        periods_per_year=periods_per_year,
                     )
                     scenario_grid.append({
                         "symbol": ticker,
@@ -951,6 +971,8 @@ def generate_consolidated_stat_arb_signals(
     alphavantage_api_key: Optional[str] = None,
     prefer_provider: Optional[str] = None,
     max_missing_vs_benchmark: float = 0.05,
+    timespan: str = "day",
+    multiplier: int = 1,
 ) -> pd.DataFrame:
     config = CorrelationConfig(
         benchmark_symbol=benchmark_symbol,
@@ -967,6 +989,8 @@ def generate_consolidated_stat_arb_signals(
         alphavantage_api_key=alphavantage_api_key,
         prefer_provider=prefer_provider,
         max_missing_vs_benchmark=max_missing_vs_benchmark,
+        timespan=timespan,
+        multiplier=multiplier,
     )
 
     rows: List[pd.DataFrame] = []
@@ -1051,6 +1075,8 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Remove +/- 3 trading days around earnings impacts using Alpha Vantage earnings.",
     )
+    parser.add_argument("--timespan", default="day", choices=["day", "hour", "minute"], help="Interval for prices.")
+    parser.add_argument("--multiplier", type=int, default=1, help="Multiplier for timespan.")
     parser.add_argument("--summary-output", default=None, help="Optional CSV path for summary metrics.")
     parser.add_argument("--signals-output", default=None, help="Optional CSV path for stat-arb signals.")
     return parser
@@ -1074,6 +1100,8 @@ def main() -> int:
         polygon_api_key=args.polygon_key or os.getenv("POLYGON_API_KEY"),
         alphavantage_api_key=args.alpha_key or os.getenv("ALPHAVANTAGE_API_KEY"),
         prefer_provider=args.provider,
+        timespan=args.timespan,
+        multiplier=args.multiplier,
     )
 
     summary_table = analysis["summary_table"]

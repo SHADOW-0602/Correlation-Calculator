@@ -297,7 +297,7 @@ def _render_correlation_results(
     if not analyses:
         st.warning("No successful symbol analyses were returned.")
         if failures:
-            st.dataframe(pd.DataFrame(failures), use_container_width=True, hide_index=True)
+            st.dataframe(pd.DataFrame(failures), width="stretch", hide_index=True)
         return
 
     top = st.columns(4)
@@ -378,7 +378,7 @@ def _render_correlation_results(
                 ]
             )
             st.markdown("**Regime map**")
-            st.dataframe(regime_table, use_container_width=True, hide_index=True)
+            st.dataframe(regime_table, width="stretch", hide_index=True)
         with table_right:
             rolling_summary = pd.DataFrame(
                 [
@@ -390,29 +390,29 @@ def _render_correlation_results(
                 ]
             )
             st.markdown("**Range summary**")
-            st.dataframe(rolling_summary, use_container_width=True, hide_index=True)
+            st.dataframe(rolling_summary, width="stretch", hide_index=True)
 
     with st.expander("Correlation matrices", expanded=False):
         left, right = st.columns(2)
         with left:
             st.markdown("**Log-return correlation**")
-            st.dataframe(corr_matrix, use_container_width=True)
+            st.dataframe(corr_matrix, width="stretch")
         with right:
             st.markdown("**Simple-return correlation**")
-            st.dataframe(simple_corr_matrix, use_container_width=True)
+            st.dataframe(simple_corr_matrix, width="stretch")
 
     with st.expander("Underlying aligned prices", expanded=False):
         aligned_prices = selected.get("aligned_prices", pd.DataFrame())
-        st.dataframe(aligned_prices.reset_index(), use_container_width=True, hide_index=True)
+        st.dataframe(aligned_prices.reset_index(), width="stretch", hide_index=True)
 
     impacts_df = selected.get("impacts_df", pd.DataFrame())
     if not impacts_df.empty:
         with st.expander("Earnings impacts used by backend", expanded=False):
-            st.dataframe(impacts_df, use_container_width=True, hide_index=True)
+            st.dataframe(impacts_df, width="stretch", hide_index=True)
 
     if failures:
         with st.expander("Failed tickers", expanded=False):
-            st.dataframe(pd.DataFrame(failures), use_container_width=True, hide_index=True)
+            st.dataframe(pd.DataFrame(failures), width="stretch", hide_index=True)
 
 
 def _metadata_dict(metadata: Optional[FetchMetadata]) -> Dict[str, Any]:
@@ -464,12 +464,13 @@ def _render_frame(frame: pd.DataFrame) -> None:
                     for attempt in attempts
                 ]
             )
-            st.dataframe(attempts_frame, use_container_width=True, hide_index=True)
+            st.dataframe(attempts_frame, width="stretch", hide_index=True)
 
     chart_col, info_col = st.columns([2.2, 1])
     with chart_col:
         plot_frame = frame[["close", "adjusted_close"]].copy()
-        st.line_chart(plot_frame)
+        plot_frame.attrs = {}  # Clear non-serializable attributes
+        st.line_chart(plot_frame, width="stretch")
 
     with info_col:
         summary = {
@@ -479,8 +480,10 @@ def _render_frame(frame: pd.DataFrame) -> None:
         }
         st.json(summary)
 
-    with st.expander("Preview data", expanded=True):
-        st.dataframe(frame.reset_index(), use_container_width=True, hide_index=True)
+    with st.expander("Raw Data Table", expanded=False):
+        df_display = frame.reset_index()
+        df_display.attrs = {}
+        st.dataframe(df_display, width="stretch", hide_index=True)
 
     csv_data = frame.reset_index().to_csv(index=False).encode("utf-8")
     st.download_button(
@@ -488,7 +491,7 @@ def _render_frame(frame: pd.DataFrame) -> None:
         data=csv_data,
         file_name="price_data.csv",
         mime="text/csv",
-        use_container_width=False,
+        width="content",
     )
 
     with st.expander("Metadata JSON", expanded=False):
@@ -562,12 +565,12 @@ def _render_multi_ticker_results(frame: pd.DataFrame, selected_fields: list[str]
                     for item in successes
                 ]
             )
-            st.dataframe(success_frame, use_container_width=True, hide_index=True)
+            st.dataframe(success_frame, width="stretch", hide_index=True)
 
     if failures:
         with st.expander("Failed tickers", expanded=True):
             failure_frame = pd.DataFrame(failures)
-            st.dataframe(failure_frame, use_container_width=True, hide_index=True)
+            st.dataframe(failure_frame, width="stretch", hide_index=True)
 
     chart_source = filtered_frame.copy()
     numeric_candidates = [col for col in chart_source.columns if pd.api.types.is_numeric_dtype(chart_source[col])]
@@ -575,7 +578,9 @@ def _render_multi_ticker_results(frame: pd.DataFrame, selected_fields: list[str]
         st.line_chart(chart_source[numeric_candidates])
 
     st.markdown("**Filtered view for CSV/export**")
-    st.dataframe(filtered_frame.reset_index(), use_container_width=True, hide_index=True)
+    export_display = filtered_frame.reset_index()
+    export_display.attrs = {}
+    st.dataframe(export_display, width="stretch", hide_index=True)
 
     download_cols = st.columns(2)
     with download_cols[0]:
@@ -592,7 +597,9 @@ def _render_multi_ticker_results(frame: pd.DataFrame, selected_fields: list[str]
         )
 
     with st.expander("Full raw dataset preview", expanded=False):
-        st.dataframe(frame.reset_index(), use_container_width=True, hide_index=True)
+        full_display = frame.reset_index()
+        full_display.attrs = {}
+        st.dataframe(full_display, width="stretch", hide_index=True)
 
 
 def _multi_ticker_panel() -> None:
@@ -637,7 +644,7 @@ def _multi_ticker_panel() -> None:
             )
 
 
-        submitted = st.form_submit_button("Fetch multiple tickers", use_container_width=True)
+        submitted = st.form_submit_button("Fetch multiple tickers", width="stretch")
 
     if submitted:
 
@@ -697,7 +704,7 @@ def _equity_panel() -> None:
             timespan = "hour" if interval_label == "Hourly" else "day"
 
 
-        submitted = st.form_submit_button("Fetch equity data", use_container_width=True)
+        submitted = st.form_submit_button("Fetch equity data", width="stretch")
 
     if submitted:
 
@@ -780,7 +787,7 @@ def _option_panel() -> None:
                 )
                 st.caption(f"Built Polygon ticker: `{built_ticker}`")
 
-        submitted = st.form_submit_button("Fetch option data", use_container_width=True)
+        submitted = st.form_submit_button("Fetch option data", width="stretch")
 
     if submitted:
 
@@ -829,7 +836,7 @@ def _render_quant_results(result: Dict[str, Any], benchmark_symbol: str) -> None
         st.markdown("**Summary metrics**")
         ordered_cols = [col for col in SUMMARY_COLUMNS if col in summary_table.columns]
         summary_display = summary_table[ordered_cols].copy()
-        st.dataframe(summary_display, use_container_width=True, hide_index=True)
+        st.dataframe(summary_display, width="stretch", hide_index=True)
 
         dl1, dl2 = st.columns(2)
         with dl1:
@@ -841,19 +848,19 @@ def _render_quant_results(result: Dict[str, Any], benchmark_symbol: str) -> None
         left, right = st.columns(2)
         with left:
             st.markdown("**Log-return correlation**")
-            st.dataframe(corr_matrix, use_container_width=True)
+            st.dataframe(corr_matrix, width="stretch")
         with right:
             st.markdown("**Simple-return correlation**")
-            st.dataframe(simple_corr_matrix, use_container_width=True)
+            st.dataframe(simple_corr_matrix, width="stretch")
 
     if failures:
         with st.expander("Failed tickers", expanded=True):
             failure_frame = pd.DataFrame(failures)
-            st.dataframe(failure_frame, use_container_width=True, hide_index=True)
+            st.dataframe(failure_frame, width="stretch", hide_index=True)
 
     if not signals.empty:
         with st.expander("Stat-arb signals", expanded=True):
-            st.dataframe(signals, use_container_width=True, hide_index=True)
+            st.dataframe(signals, width="stretch", hide_index=True)
 
     if analyses:
         symbol_options = list(analyses.keys())
@@ -886,22 +893,24 @@ def _render_quant_results(result: Dict[str, Any], benchmark_symbol: str) -> None
 
         with st.expander("Outlier table", expanded=False):
             outliers = selected.get("outliers_table", pd.DataFrame())
-            st.dataframe(outliers, use_container_width=True, hide_index=True)
+            st.dataframe(outliers, width="stretch", hide_index=True)
             if not outliers.empty:
                 _download_csv_button(
                     f"Download {selected_symbol} outliers CSV",
                     outliers,
                     f"{selected_symbol.lower()}_outliers.csv",
-                    use_container_width=False,
+                    width="content",
                 )
 
         with st.expander("Aligned price matrix", expanded=False):
-            st.dataframe(aligned_prices.reset_index(), use_container_width=True, hide_index=True)
+            prices_display = aligned_prices.reset_index()
+            prices_display.attrs = {}
+            st.dataframe(prices_display, width="stretch", hide_index=True)
 
         impacts_df = selected.get("impacts_df", pd.DataFrame())
         if not impacts_df.empty:
             with st.expander("Earnings impacts used for filtering", expanded=False):
-                st.dataframe(impacts_df, use_container_width=True, hide_index=True)
+                st.dataframe(impacts_df, width="stretch", hide_index=True)
 
 
 def _correlation_panel() -> None:
@@ -957,18 +966,20 @@ def _correlation_panel() -> None:
         with row6:
             adjusted = st.toggle("Adjusted prices", value=True, key="corr_adjusted")
         with row7:
-            regime = st.selectbox("Regime view", options=["All", "Bull", "Bear"], index=0)
+            interval_label = st.radio("Interval", options=["Daily", "Hourly"], horizontal=True, key="corr_interval")
+            timespan = "hour" if interval_label == "Hourly" else "day"
         with row8:
-            sector_proxy = st.selectbox("Sector ETF proxy", options=SECTOR_ETF_OPTIONS, index=0)
+            regime = st.selectbox("Regime view", options=["All", "Bull", "Bear"], index=0)
 
         row9, row10, row11, row12 = st.columns(4)
         with row9:
-            remove_earnings = st.toggle("Remove earnings windows", value=False, key="corr_earnings")
+            sector_proxy = st.selectbox("Sector ETF proxy", options=SECTOR_ETF_OPTIONS, index=0)
         with row10:
-            winsor_label = st.selectbox("Tail handling", options=list(WINSOR_OPTIONS.keys()), index=0)
+            remove_earnings = st.toggle("Remove earnings windows", value=False, key="corr_earnings")
         with row11:
-            use_decay = st.toggle("Use decay weighting", value=False, key="corr_decay")
+            winsor_label = st.selectbox("Tail handling", options=list(WINSOR_OPTIONS.keys()), index=0)
         with row12:
+            use_decay = st.toggle("Use decay weighting", value=False, key="corr_decay")
             decay_halflife = st.number_input(
                 "Decay half-life",
                 min_value=2.0,
@@ -979,12 +990,12 @@ def _correlation_panel() -> None:
                 disabled=not use_decay,
             )
 
-        row13, row14, row15, row16 = st.columns(4)
-        with row13:
-            lookback = st.number_input("Regression lookback", min_value=20, max_value=1000, value=252, step=10)
+        row14, row15, row16, row17 = st.columns(4)
         with row14:
-            rolling_window = st.number_input("Rolling corr window", min_value=10, max_value=252, value=60, step=5)
+            lookback = st.number_input("Regression lookback", min_value=20, max_value=1000, value=252, step=10)
         with row15:
+            rolling_window = st.number_input("Rolling corr window", min_value=10, max_value=252, value=60, step=5)
+        with row16:
             max_missing = st.number_input(
                 "Max missing vs benchmark",
                 min_value=0.0,
@@ -993,7 +1004,7 @@ def _correlation_panel() -> None:
                 step=0.01,
                 format="%.2f",
             )
-        with row16:
+        with row17:
             risk_free_rate = st.number_input(
                 "Risk-free rate",
                 min_value=0.0,
@@ -1004,7 +1015,7 @@ def _correlation_panel() -> None:
             )
 
 
-        submitted = st.form_submit_button("Run correlation analysis", use_container_width=True)
+        submitted = st.form_submit_button("Run correlation analysis", width="stretch")
 
     if submitted:
 
@@ -1049,6 +1060,8 @@ def _correlation_panel() -> None:
                     max_missing_vs_benchmark=float(max_missing),
                     risk_free_rate=float(risk_free_rate),
                     manual_sector_etf=None if sector_proxy == "Auto detect / not set" else sector_proxy,
+                    timespan=timespan,
+                    multiplier=1,
                 )
                 st.success("Correlation analysis completed successfully.")
                 _render_correlation_results(
