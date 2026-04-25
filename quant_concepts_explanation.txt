@@ -1,0 +1,34 @@
+QUANITATIVE ANALYSIS CONCEPTS EXPLANATION
+
+1. WINSORIZING (HANDLING OUTLIERS)
+----------------------------------
+In financial data, outliers (extreme price moves) are often "noise" rather than "signal." A single bad day can disproportionately skew a Beta or Correlation calculation.
+
+* What it is: Winsorizing caps extreme values at a specific percentile instead of deleting them (trimming).
+* How it works: At a 1% level, the lowest 1% of returns are replaced by the value of the 1st percentile, and the highest 1% by the 99th percentile.
+* Why use it: It keeps the sample size intact while preventing "black swan" events from making your regression model unstable.
+* Implementation: See 'winsorize_series' in quant_analysis.py.
+
+2. ROLLING ANALYSIS
+-------------------
+Most financial relationships are "non-stationary"—they change over time.
+
+* What it is: Instead of one static number for the whole history, you use a sliding window (e.g., 63 trading days / 3 months).
+* Point-in-Time (PIT) Safety: Ensures results for a specific date only use data available on or before that date, preventing "look-ahead bias."
+* Why use it: It tracks the trajectory of a relationship. For example: "Is this stock becoming more or less sensitive to the market lately?"
+* Implementation: See 'rolling_ols_params_point_in_time' in quant_analysis.py.
+
+3. SINGLE VS. MULTIPLE BENCHMARKS
+---------------------------------
+Determines if a stock is moved by the broad market or specific structural drivers.
+
+* Single Benchmark (e.g., SPY): Measures "Systematic Risk" (CAPM Beta). Tells you how the stock moves with the S&P 500.
+* Multiple Benchmarks (Sector/Factor): Separates market noise from specific drivers. 
+* Why use it: It provides Contextual Alpha. For example, NVIDIA might have 80% Tech sector correlation and only 20% broad market correlation. This helps identify if a stock's performance is unique or just a sector trend.
+* Implementation: See 'Sector-Relative Analytics' and 'SECTOR_ETF_MAP' in quant_analysis.py.
+
+----------------------------------
+Summary Comparison:
+- Outliers: Simple (Ignore) vs. Institutional (Winsorize)
+- Time: Simple (Static) vs. Institutional (Rolling Window)
+- Benchmark: Simple (Market Only) vs. Institutional (Market + Sector ETF)
