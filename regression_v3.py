@@ -11,12 +11,15 @@ from typing import Any, Dict, Iterable, List, Optional
 import numpy as np
 import pandas as pd
 import requests
+from dotenv import load_dotenv
 
-ALPHAVANTAGE_API_KEY = "NM0N1PZLUP2KLMY9"
+load_dotenv()
+
+ALPHAVANTAGE_API_KEY = os.getenv("ALPHAVANTAGE_API_KEY", "")
 ALPHAVANTAGE_BASE_URL = "https://www.alphavantage.co/query"
 
-# Hardcoded Polygon/Massive API key (as requested).
-POLYGON_API_KEY = "O4oo9zdnIAYbAEVWg1a3Ze5XiPBuY5p8"
+# Fetch Polygon/Massive API key from environment.
+POLYGON_API_KEY = os.getenv("POLYGON_API_KEY", "")
 POLYGON_BASE_URL = "https://api.polygon.io"
 
 DEFAULT_BENCHMARK_SYMBOL = "SPY"
