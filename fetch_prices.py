@@ -800,6 +800,9 @@ def _fetch_option_polygon(
         raise ValueError(msg)
 
 
+    divs = pd.Series(dtype=float)
+    splits = pd.Series(dtype=float)
+
     frame = pd.DataFrame(results)
     standardized = pd.DataFrame(
         {
