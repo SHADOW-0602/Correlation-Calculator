@@ -67,6 +67,8 @@ class FetchMetadata:
     from_date: date
     to_date: date
     adjusted: bool
+    timespan: str = "day"
+    multiplier: int = 1
     option_ticker: Optional[str] = None
 
 
@@ -389,6 +391,7 @@ def _fetch_equity_yfinance(
     from_date: date,
     to_date: date,
     adjusted: bool = True,
+    interval: str = "day",
 ) -> pd.DataFrame:
     if yf is None:
         raise ImportError("yfinance is not installed. Run `pip install yfinance` to enable it.")
@@ -399,7 +402,7 @@ def _fetch_equity_yfinance(
     raw = ticker.history(
         start=from_date.isoformat(),
         end=end_exclusive.isoformat(),
-        interval="1d",
+        interval="1h" if interval == "hour" else "1d",
         auto_adjust=False,
         actions=True,
         repair=True,
@@ -491,6 +494,8 @@ def _fetch_equity_polygon(
     to_date: date,
     api_key: str,
     adjusted: bool = True,
+    timespan: str = "day",
+    multiplier: int = 1,
     timeout_s: int = DEFAULT_TIMEOUT_S,
     session: Optional[requests.Session] = None,
 ) -> pd.DataFrame:
@@ -498,7 +503,7 @@ def _fetch_equity_polygon(
         raise ValueError("Polygon API key is required for Polygon requests.")
 
     url = (
-        f"{POLYGON_BASE_URL}/v2/aggs/ticker/{symbol}/range/1/day/"
+        f"{POLYGON_BASE_URL}/v2/aggs/ticker/{symbol}/range/{multiplier}/{timespan}/"
         f"{from_date.isoformat()}/{to_date.isoformat()}"
     )
     params = {
@@ -523,7 +528,7 @@ def _fetch_equity_polygon(
     frame = pd.DataFrame(results)
     standardized = pd.DataFrame(
         {
-            "date": pd.to_datetime(frame["t"], unit="ms", utc=True).dt.tz_convert(None).dt.normalize(),
+            "date": pd.to_datetime(frame["t"], unit="ms", utc=True).dt.tz_convert(None),
             "open": frame.get("o"),
             "high": frame.get("h"),
             "low": frame.get("l"),
@@ -534,6 +539,9 @@ def _fetch_equity_polygon(
             "stock_splits": 0.0,
         }
     ).set_index("date")
+
+    if timespan == "day":
+        standardized.index = standardized.index.normalize()
 
     if not divs.empty:
         standardized["dividends"] = standardized.index.map(divs).fillna(0.0)
@@ -550,19 +558,31 @@ def _fetch_equity_alphavantage(
     to_date: date,
     api_key: str,
     adjusted: bool = True,
+    timespan: str = "day",
+    multiplier: int = 1,
     timeout_s: int = DEFAULT_TIMEOUT_S,
     session: Optional[requests.Session] = None,
 ) -> pd.DataFrame:
     if not api_key:
         raise ValueError("Alpha Vantage API key is required for Alpha Vantage requests.")
 
-    params = {
-        "function": "TIME_SERIES_DAILY_ADJUSTED" if adjusted else "TIME_SERIES_DAILY",
-        "symbol": symbol,
-        "outputsize": "compact",
-        "datatype": "json",
-        "apikey": api_key,
-    }
+    if timespan == "hour":
+        params = {
+            "function": "TIME_SERIES_INTRADAY",
+            "symbol": symbol,
+            "interval": f"{60 * multiplier}min",
+            "outputsize": "full",
+            "datatype": "json",
+            "apikey": api_key,
+        }
+    else:
+        params = {
+            "function": "TIME_SERIES_DAILY_ADJUSTED" if adjusted else "TIME_SERIES_DAILY",
+            "symbol": symbol,
+            "outputsize": "compact",
+            "datatype": "json",
+            "apikey": api_key,
+        }
     payload = _safe_json(
         _http_get(ALPHAVANTAGE_BASE_URL, params=params, timeout_s=timeout_s, session=session)
     )
@@ -607,6 +627,8 @@ def fetch_equity_prices(
     from_date: Any,
     to_date: Any,
     adjusted: bool = True,
+    timespan: str = "day",
+    multiplier: int = 1,
     polygon_api_key: Optional[str] = None,
     alphavantage_api_key: Optional[str] = None,
     prefer_provider: Optional[str] = None,
@@ -644,7 +666,7 @@ def fetch_equity_prices(
     for provider_name, reason in providers:
         try:
             if provider_name == "yfinance":
-                data = _fetch_equity_yfinance(normalized_symbol, from_date=start, to_date=end, adjusted=adjusted)
+                data = _fetch_equity_yfinance(normalized_symbol, from_date=start, to_date=end, adjusted=adjusted, interval=timespan)
             elif provider_name == "polygon":
                 data = _fetch_equity_polygon(
                     normalized_symbol,
@@ -652,6 +674,8 @@ def fetch_equity_prices(
                     to_date=end,
                     api_key=polygon_key,
                     adjusted=adjusted,
+                    timespan=timespan,
+                    multiplier=multiplier,
                 )
             elif provider_name in {"alphavantage", "alpha_vantage"}:
                 data = _fetch_equity_alphavantage(
@@ -660,6 +684,8 @@ def fetch_equity_prices(
                     to_date=end,
                     api_key=alpha_key,
                     adjusted=adjusted,
+                    timespan=timespan,
+                    multiplier=multiplier,
                 )
                 provider_name = "alphavantage"
             else:
@@ -679,6 +705,8 @@ def fetch_equity_prices(
                     from_date=start,
                     to_date=end,
                     adjusted=adjusted,
+                    timespan=timespan,
+                    multiplier=multiplier,
                 ),
             )
         except Exception as exc:
@@ -700,6 +728,8 @@ def fetch_multiple_equity_prices(
     from_date: Any,
     to_date: Any,
     adjusted: bool = True,
+    timespan: str = "day",
+    multiplier: int = 1,
     polygon_api_key: Optional[str] = None,
     alphavantage_api_key: Optional[str] = None,
     prefer_provider: Optional[str] = None,
@@ -722,6 +752,8 @@ def fetch_multiple_equity_prices(
                 from_date=from_date,
                 to_date=to_date,
                 adjusted=adjusted,
+                timespan=timespan,
+                multiplier=multiplier,
                 polygon_api_key=polygon_api_key,
                 alphavantage_api_key=alphavantage_api_key,
                 prefer_provider=prefer_provider,
@@ -757,6 +789,8 @@ def fetch_multiple_equity_prices(
         "from_date": _parse_date(from_date, field_name="from_date").isoformat(),
         "to_date": _parse_date(to_date, field_name="to_date").isoformat(),
         "adjusted": adjusted,
+        "timespan": timespan,
+        "multiplier": multiplier,
     }
     return combined[MULTI_SYMBOL_COLUMNS]
 
@@ -806,7 +840,7 @@ def _fetch_option_polygon(
     frame = pd.DataFrame(results)
     standardized = pd.DataFrame(
         {
-            "date": pd.to_datetime(frame["t"], unit="ms", utc=True).dt.tz_convert(None).dt.normalize(),
+            "date": pd.to_datetime(frame["t"], unit="ms", utc=True).dt.tz_convert(None),
             "open": frame.get("o"),
             "high": frame.get("h"),
             "low": frame.get("l"),
@@ -817,6 +851,9 @@ def _fetch_option_polygon(
             "stock_splits": 0.0,
         }
     ).set_index("date")
+
+    if timespan == "day":
+        standardized.index = standardized.index.normalize()
 
     if not divs.empty:
         standardized["dividends"] = standardized.index.map(divs).fillna(0.0)
@@ -836,6 +873,8 @@ def fetch_option_prices(
     right: Optional[str] = None,
     strike: Optional[float] = None,
     adjusted: bool = True,
+    timespan: str = "day",
+    multiplier: int = 1,
     polygon_api_key: Optional[str] = None,
 ) -> pd.DataFrame:
     """
@@ -861,6 +900,8 @@ def fetch_option_prices(
         to_date=end,
         api_key=polygon_key,
         adjusted=adjusted,
+        timespan=timespan,
+        multiplier=multiplier,
     )
     return _with_metadata(
         data,
@@ -872,6 +913,8 @@ def fetch_option_prices(
             from_date=start,
             to_date=end,
             adjusted=adjusted,
+            timespan=timespan,
+            multiplier=multiplier,
         ),
     )
 
@@ -883,6 +926,8 @@ def fetch_prices(
     from_date: Any,
     to_date: Any,
     adjusted: bool = True,
+    timespan: str = "day",
+    multiplier: int = 1,
     prefer_provider: Optional[str] = None,
     option_ticker: Optional[str] = None,
     expiry: Optional[Any] = None,
@@ -899,6 +944,8 @@ def fetch_prices(
             from_date=from_date,
             to_date=to_date,
             adjusted=adjusted,
+            timespan=timespan,
+            multiplier=multiplier,
             polygon_api_key=polygon_api_key,
             alphavantage_api_key=alphavantage_api_key,
             prefer_provider=prefer_provider,
@@ -914,6 +961,8 @@ def fetch_prices(
             right=right,
             strike=strike,
             adjusted=adjusted,
+            timespan=timespan,
+            multiplier=multiplier,
             polygon_api_key=polygon_api_key,
         )
 
@@ -940,8 +989,6 @@ def fetch_symbol_overview_av(
     return _safe_json(response)
 
 
-
-
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Fetch adjusted daily OHLCV equity data or historical option bars."
@@ -963,6 +1010,8 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Return raw OHLC fields when the provider supports it.",
     )
+    equity.add_argument("--timespan", default="day", choices=["minute", "hour", "day", "week", "month", "quarter", "year"])
+    equity.add_argument("--multiplier", type=int, default=1)
     equity.add_argument("--csv", dest="csv_path", help="Optional CSV export path.")
 
     option = subparsers.add_parser("option", help="Fetch historical option OHLCV bars from Polygon.")
@@ -973,6 +1022,8 @@ def _build_parser() -> argparse.ArgumentParser:
     option.add_argument("--expiry", help="Expiration date YYYY-MM-DD")
     option.add_argument("--right", help="C/CALL or P/PUT")
     option.add_argument("--strike", type=float, help="Option strike, e.g. 640")
+    option.add_argument("--timespan", default="day", choices=["minute", "hour", "day", "week", "month", "quarter", "year"])
+    option.add_argument("--multiplier", type=int, default=1)
     option.add_argument("--csv", dest="csv_path", help="Optional CSV export path.")
 
     return parser
@@ -987,6 +1038,7 @@ def _print_summary(frame: pd.DataFrame) -> None:
         if metadata.option_ticker:
             print(f"option_ticker={metadata.option_ticker}")
         print(f"from={metadata.from_date.isoformat()} to={metadata.to_date.isoformat()}")
+        print(f"interval={metadata.multiplier} {metadata.timespan}")
     print(f"rows={len(frame)}")
     if not frame.empty:
         print(frame.head(3).to_string())
@@ -1004,6 +1056,8 @@ def main() -> None:
             from_date=args.from_date,
             to_date=args.to_date,
             adjusted=not args.unadjusted,
+            timespan=args.timespan,
+            multiplier=args.multiplier,
             prefer_provider=args.prefer_provider,
         )
     else:
@@ -1015,6 +1069,8 @@ def main() -> None:
             expiry=args.expiry,
             right=args.right,
             strike=args.strike,
+            timespan=args.timespan,
+            multiplier=args.multiplier,
         )
 
     if getattr(args, "csv_path", None):

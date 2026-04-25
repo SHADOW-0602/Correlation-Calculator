@@ -434,7 +434,7 @@ def _render_frame(frame: pd.DataFrame) -> None:
     attempts = frame.attrs.get("provider_attempts", [])
 
     if metadata:
-        meta_cols = st.columns(5)
+        meta_cols = st.columns(6)
         with meta_cols[0]:
             st.metric("Provider", metadata.provider)
         with meta_cols[1]:
@@ -442,8 +442,10 @@ def _render_frame(frame: pd.DataFrame) -> None:
         with meta_cols[2]:
             st.metric("Symbol", metadata.symbol)
         with meta_cols[3]:
-            st.metric("Rows", len(frame))
+            st.metric("Interval", f"{metadata.multiplier} {metadata.timespan}")
         with meta_cols[4]:
+            st.metric("Rows", len(frame))
+        with meta_cols[5]:
             st.metric("Adjusted", "Yes" if metadata.adjusted else "No")
 
         if metadata.option_ticker:
@@ -624,7 +626,10 @@ def _multi_ticker_panel() -> None:
         with row5:
             adjusted = st.toggle("Adjusted OHLC", value=True, key="multi_adjusted")
         with row6:
-            selected_fields = st.multiselect(
+            interval_label = st.radio("Interval", options=["Daily", "Hourly"], horizontal=True, key="multi_interval")
+            timespan = "hour" if interval_label == "Hourly" else "day"
+
+        selected_fields = st.multiselect(
                 "Fields to show in CSV",
                 options=FIELD_OPTIONS,
                 default=["close"],
@@ -650,6 +655,8 @@ def _multi_ticker_panel() -> None:
                     from_date=from_date,
                     to_date=to_date,
                     adjusted=adjusted,
+                    timespan=timespan,
+                    multiplier=1,
                     polygon_api_key=st.session_state["polygon_api_key"] or None,
                     alphavantage_api_key=st.session_state["alphavantage_api_key"] or None,
                     prefer_provider=None if provider == "auto" else provider,
@@ -682,7 +689,12 @@ def _equity_panel() -> None:
                 index=0,
             )
 
-        adjusted = st.toggle("Adjusted OHLC", value=True)
+        col5, col6 = st.columns(2)
+        with col5:
+            adjusted = st.toggle("Adjusted OHLC", value=True)
+        with col6:
+            interval_label = st.radio("Interval", options=["Daily", "Hourly"], horizontal=True, key="equity_interval")
+            timespan = "hour" if interval_label == "Hourly" else "day"
 
 
         submitted = st.form_submit_button("Fetch equity data", use_container_width=True)
@@ -700,6 +712,8 @@ def _equity_panel() -> None:
                     from_date=from_date,
                     to_date=to_date,
                     adjusted=adjusted,
+                    timespan=timespan,
+                    multiplier=1,
                     polygon_api_key=st.session_state["polygon_api_key"] or None,
                     alphavantage_api_key=st.session_state["alphavantage_api_key"] or None,
                     prefer_provider=None if provider == "auto" else provider,
@@ -729,6 +743,9 @@ def _option_panel() -> None:
             from_date = st.date_input("From ", value=date.today() - timedelta(days=45), key="opt_from")
         with top2:
             to_date = st.date_input("To ", value=date.today(), key="opt_to")
+
+        interval_label = st.radio("Interval ", options=["Daily", "Hourly"], horizontal=True, key="opt_interval")
+        timespan = "hour" if interval_label == "Hourly" else "day"
 
 
         option_ticker = None
@@ -777,6 +794,9 @@ def _option_panel() -> None:
                     expiry=expiry,
                     right=right,
                     strike=float(strike) if strike is not None else None,
+                    adjusted=True,
+                    timespan=timespan,
+                    multiplier=1,
                     polygon_api_key=st.session_state["polygon_api_key"] or None,
                 )
                 st.success("Option data fetched successfully.")
