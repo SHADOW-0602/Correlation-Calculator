@@ -97,6 +97,18 @@ def _parse_date(value: Any, *, field_name: str) -> date:
     return ts.date()
 
 
+def _parse_iso_date(s: Any) -> Optional[date]:
+    if s is None:
+        return None
+    try:
+        ts = pd.to_datetime(str(s), errors="coerce")
+    except Exception:
+        return None
+    if pd.isna(ts):
+        return None
+    return ts.date()
+
+
 def _coerce_date_window(
     from_date: Any,
     to_date: Any,

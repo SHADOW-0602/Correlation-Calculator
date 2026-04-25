@@ -1,6 +1,7 @@
 streamlit
 pandas
 numpy
+scipy
 requests
 python-dotenv
 yfinance
